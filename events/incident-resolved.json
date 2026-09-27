@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "id": "test-evt-003",
+  "source": "resqflow.incident",
+  "detail-type": "IncidentResolved",
+  "time": "2026-09-27T10:30:00Z",
+  "detail": {
+    "incidentId": "INC-1001",
+    "status": "RESOLVED",
+    "resolutionSummary": "Fire contained, civilians evacuated safely. Medical attention administered.",
+    "correlationId": "INC-1001",
+    "idempotencyKey": "INC-1001:IncidentResolved:1"
+  }
+}

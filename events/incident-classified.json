@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "id": "test-evt-002",
+  "source": "resqflow.incident",
+  "detail-type": "IncidentClassified",
+  "time": "2026-09-27T10:00:05Z",
+  "detail": {
+    "incidentId": "INC-1001",
+    "category": "FIRE",
+    "severity": "CRITICAL",
+    "summary": "High-impact critical fire incident affecting 12 person(s). Requires immediate CRITICAL dispatch protocol.",
+    "recommendedResources": [
+      "FIRE_RESPONSE_TEAM_ALPHA",
+      "RAPID_WATER_TENDER",
+      "PARAMEDIC_UNIT"
+    ],
+    "peopleAffected": 12,
+    "location": {
+      "latitude": 16.5062,
+      "longitude": 80.6480
+    },
+    "reportedBy": "USER-001",
+    "correlationId": "INC-1001",
+    "idempotencyKey": "INC-1001:IncidentClassified:1"
+  }
+}

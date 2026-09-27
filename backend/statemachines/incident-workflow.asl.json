@@ -1,0 +1,154 @@
+{
+  "Comment": "ResQFlow Incident Orchestration Workflow — Deterministic Event-Driven Emergency Response",
+  "StartAt": "ValidateIncidentPayload",
+  "States": {
+    "ValidateIncidentPayload": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.incidentId",
+          "IsPresent": true,
+          "Next": "RouteBySeverity"
+        }
+      ],
+      "Default": "WorkflowFailed"
+    },
+    "RouteBySeverity": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.severity",
+          "StringEquals": "CRITICAL",
+          "Next": "AllocateEmergencyResources"
+        },
+        {
+          "Variable": "$.severity",
+          "StringEquals": "HIGH",
+          "Next": "AllocatePriorityResources"
+        }
+      ],
+      "Default": "AllocateStandardResources"
+    },
+    "AllocateEmergencyResources": {
+      "Type": "Task",
+      "Resource": "${ResourceAllocationFunctionArn}",
+      "Parameters": {
+        "incidentId.$": "$.incidentId",
+        "severity": "CRITICAL",
+        "category.$": "$.category",
+        "peopleAffected.$": "$.peopleAffected",
+        "location.$": "$.location",
+        "correlationId.$": "$.correlationId"
+      },
+      "ResultPath": "$.allocationResult",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "WorkflowFailed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "NotifyResponders"
+    },
+    "AllocatePriorityResources": {
+      "Type": "Task",
+      "Resource": "${ResourceAllocationFunctionArn}",
+      "Parameters": {
+        "incidentId.$": "$.incidentId",
+        "severity": "HIGH",
+        "category.$": "$.category",
+        "peopleAffected.$": "$.peopleAffected",
+        "location.$": "$.location",
+        "correlationId.$": "$.correlationId"
+      },
+      "ResultPath": "$.allocationResult",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "WorkflowFailed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "NotifyResponders"
+    },
+    "AllocateStandardResources": {
+      "Type": "Task",
+      "Resource": "${ResourceAllocationFunctionArn}",
+      "Parameters": {
+        "incidentId.$": "$.incidentId",
+        "severity": "MEDIUM",
+        "category.$": "$.category",
+        "peopleAffected.$": "$.peopleAffected",
+        "location.$": "$.location",
+        "correlationId.$": "$.correlationId"
+      },
+      "ResultPath": "$.allocationResult",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "WorkflowFailed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "NotifyResponders"
+    },
+    "NotifyResponders": {
+      "Type": "Task",
+      "Resource": "${NotificationFunctionArn}",
+      "Parameters": {
+        "incidentId.$": "$.incidentId",
+        "severity.$": "$.severity",
+        "category.$": "$.category",
+        "assignedTeam.$": "$.allocationResult.body.assignedTeam",
+        "hospital.$": "$.allocationResult.body.hospital",
+        "etaMinutes.$": "$.allocationResult.body.etaMinutes",
+        "peopleAffected.$": "$.peopleAffected",
+        "location.$": "$.location",
+        "correlationId.$": "$.correlationId"
+      },
+      "ResultPath": "$.notificationResult",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Next": "WorkflowCompleted"
+    },
+    "WorkflowCompleted": {
+      "Type": "Pass",
+      "End": true
+    },
+    "WorkflowFailed": {
+      "Type": "Fail",
+      "Cause": "Incident workflow failed during validation or resource dispatch execution",
+      "Error": "WorkflowFailed"
+    }
+  }
+}

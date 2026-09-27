@@ -1,0 +1,226 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ResQFlow — Intelligent Event-Driven Emergency Response and Resource Orchestration Platform
+  Primary Region: ap-south-2 (Asia Pacific - Hyderabad)
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.12
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref IncidentsTable
+        EVENT_BUS_NAME: !Ref EventBus
+        SNS_TOPIC_ARN: !Ref AlertsTopic
+        APP_REGION: !Ref "AWS::Region"
+
+Resources:
+  # ==========================================================
+  # 1. DYNAMODB STORAGE LAYER
+  # ==========================================================
+  IncidentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ResQFlowIncidents
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: incidentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: incidentId
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: false
+      Tags:
+        - Key: Project
+          Value: ResQFlow
+
+  # ==========================================================
+  # 2. EVENT ROUTING LAYER (Amazon EventBridge Custom Bus)
+  # ==========================================================
+  EventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: resqflow-event-bus
+
+  # ==========================================================
+  # 3. NOTIFICATION LAYER (Amazon SNS)
+  # ==========================================================
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: ResQFlowAlerts
+      DisplayName: ResQFlow Emergency Response Alerts
+
+  # ==========================================================
+  # 4. INGESTION API (Amazon API Gateway HTTP API)
+  # ==========================================================
+  ResQFlowHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: ResQFlow-IngestionApi
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        MaxAge: 600
+
+  # ==========================================================
+  # 5. INGESTION LAMBDA FUNCTION
+  # ==========================================================
+  IngestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResQFlow-IngestionFunction
+      CodeUri: ../backend/ingestion
+      Handler: app.lambda_handler
+      Description: Ingests emergency incidents, stores in DynamoDB, and emits IncidentReported
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IncidentsTable
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref EventBus
+      Events:
+        CreateIncident:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ResQFlowHttpApi
+            Path: /incidents
+            Method: POST
+        ListIncidents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ResQFlowHttpApi
+            Path: /incidents
+            Method: GET
+        GetIncident:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ResQFlowHttpApi
+            Path: /incidents/{incidentId}
+            Method: GET
+
+  # ==========================================================
+  # 6. CLASSIFIER LAMBDA FUNCTION
+  # ==========================================================
+  ClassifierFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResQFlow-ClassifierFunction
+      CodeUri: ../backend/classifier
+      Handler: app.lambda_handler
+      Description: Classifies incident severity deterministically and emits IncidentClassified
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IncidentsTable
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref EventBus
+      Events:
+        IncidentReportedRule:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBus
+            Pattern:
+              source:
+                - resqflow.incident
+              detail-type:
+                - IncidentReported
+
+  # ==========================================================
+  # 7. RESOURCE ALLOCATION LAMBDA FUNCTION
+  # ==========================================================
+  ResourceAllocationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResQFlow-ResourceAllocationFunction
+      CodeUri: ../backend/resource
+      Handler: app.lambda_handler
+      Description: Allocates response teams and hospital facilities based on severity
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IncidentsTable
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref EventBus
+
+  # ==========================================================
+  # 8. NOTIFICATION LAMBDA FUNCTION
+  # ==========================================================
+  NotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResQFlow-NotificationFunction
+      CodeUri: ../backend/notification
+      Handler: app.lambda_handler
+      Description: Dispatches broadcast SMS/Email alerts via Amazon SNS
+      Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt AlertsTopic.TopicName
+
+  # ==========================================================
+  # 9. STEP FUNCTIONS ORCHESTRATION WORKFLOW
+  # ==========================================================
+  ResQFlowStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: ResQFlowIncidentWorkflow
+      DefinitionUri: ../backend/statemachines/incident-workflow.asl.json
+      DefinitionSubstitutions:
+        ResourceAllocationFunctionArn: !GetAtt ResourceAllocationFunction.Arn
+        NotificationFunctionArn: !GetAtt NotificationFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ResourceAllocationFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref NotificationFunction
+      Events:
+        IncidentClassifiedRule:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBus
+            Pattern:
+              source:
+                - resqflow.incident
+              detail-type:
+                - IncidentClassified
+
+Outputs:
+  ApiEndpoint:
+    Description: Base HTTP API Endpoint for ResQFlow
+    Value: !Sub "https://${ResQFlowHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Export:
+      Name: ResQFlow-ApiEndpoint
+
+  IncidentsTableName:
+    Description: DynamoDB Table Name
+    Value: !Ref IncidentsTable
+    Export:
+      Name: ResQFlow-IncidentsTableName
+
+  EventBusArn:
+    Description: ResQFlow Custom EventBus ARN
+    Value: !GetAtt EventBus.Arn
+    Export:
+      Name: ResQFlow-EventBusArn
+
+  AlertsTopicArn:
+    Description: ResQFlow SNS Alerts Topic ARN
+    Value: !Ref AlertsTopic
+    Export:
+      Name: ResQFlow-AlertsTopicArn
+
+  StateMachineArn:
+    Description: ResQFlow Step Functions Orchestrator ARN
+    Value: !Ref ResQFlowStateMachine
+    Export:
+      Name: ResQFlow-StateMachineArn

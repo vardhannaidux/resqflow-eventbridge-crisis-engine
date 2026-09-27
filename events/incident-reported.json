@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "id": "test-evt-001",
+  "source": "resqflow.incident",
+  "detail-type": "IncidentReported",
+  "time": "2026-09-27T10:00:00Z",
+  "detail": {
+    "incidentId": "INC-1001",
+    "type": "FIRE",
+    "description": "Severe commercial building fire reported near school zone",
+    "severity": "UNKNOWN",
+    "peopleAffected": 12,
+    "location": {
+      "latitude": 16.5062,
+      "longitude": 80.6480
+    },
+    "reportedBy": "USER-001",
+    "correlationId": "INC-1001",
+    "idempotencyKey": "INC-1001:IncidentReported:1"
+  }
+}
