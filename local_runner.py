@@ -5,13 +5,24 @@ from datetime import datetime, timezone
 import sys
 import os
 
-# Add backend to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "backend")))
+# Ensure local directories are on python path
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_DIR = os.path.join(CURRENT_DIR, "backend")
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
 
-from common.validation import validate_incident_payload
-from classifier.app import classify_incident
-from resource.app import allocate_resources
-from notification.app import format_alert_message
+try:
+    from backend.common.validation import validate_incident_payload
+    from backend.classifier.app import classify_incident
+    from backend.resource.app import allocate_resources
+    from backend.notification.app import format_alert_message
+except ImportError:
+    from common.validation import validate_incident_payload  # type: ignore
+    from classifier.app import classify_incident  # type: ignore
+    from resource.app import allocate_resources  # type: ignore
+    from notification.app import format_alert_message  # type: ignore
 
 # Local simulated DynamoDB Table
 LOCAL_INCIDENTS_STORE = {}
