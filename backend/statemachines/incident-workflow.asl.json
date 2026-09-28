@@ -1,10 +1,15 @@
 {
   "Comment": "ResQFlow Incident Orchestration Workflow — Deterministic Event-Driven Emergency Response",
-  "StartAt": "ValidateIncidentPayload",
+  "StartAt": "NormalizeInput",
   "States": {
-    "ValidateIncidentPayload": {
+    "NormalizeInput": {
       "Type": "Choice",
       "Choices": [
+        {
+          "Variable": "$.detail.incidentId",
+          "IsPresent": true,
+          "Next": "ExtractDetail"
+        },
         {
           "Variable": "$.incidentId",
           "IsPresent": true,
@@ -12,6 +17,11 @@
         }
       ],
       "Default": "WorkflowFailed"
+    },
+    "ExtractDetail": {
+      "Type": "Pass",
+      "InputPath": "$.detail",
+      "Next": "RouteBySeverity"
     },
     "RouteBySeverity": {
       "Type": "Choice",
