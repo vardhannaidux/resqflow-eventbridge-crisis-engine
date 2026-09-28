@@ -4,7 +4,7 @@ import IncidentForm from './components/IncidentForm';
 import IncidentTable from './components/IncidentTable';
 import { Flame, RefreshCw, Radio, Check, Globe } from 'lucide-react';
 
-const DEFAULT_API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || 'https://cpbcrc0eol.execute-api.ap-south-2.amazonaws.com';
+const DEFAULT_API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || 'https://ezdw12h7z5.execute-api.ap-south-2.amazonaws.com';
 
 export default function App() {
   const [apiEndpoint, setApiEndpoint] = useState(DEFAULT_API_ENDPOINT);
