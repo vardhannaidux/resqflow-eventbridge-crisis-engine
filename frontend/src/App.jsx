@@ -61,6 +61,24 @@ export default function App() {
     }
   };
 
+  const [isDrillRunning, setIsDrillRunning] = useState(false);
+
+  const handleTriggerDrill = async () => {
+    setIsDrillRunning(true);
+    try {
+      const res = await fetch(`${apiEndpoint}/incidents/drill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await fetchIncidents();
+    } catch (err) {
+      alert(`Error triggering drill: ${err.message}`);
+    } finally {
+      setIsDrillRunning(false);
+    }
+  };
+
   return (
     <div className="app-container">
       {/* Header */}
@@ -92,6 +110,28 @@ export default function App() {
               onChange={(e) => setApiEndpoint(e.target.value.trim())}
             />
           </div>
+
+          <button 
+            onClick={handleTriggerDrill}
+            disabled={isDrillRunning}
+            style={{
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+              border: 'none',
+              color: '#ffffff',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: 600,
+              boxShadow: '0 2px 10px rgba(139, 92, 246, 0.4)'
+            }}
+          >
+            <Radio size={14} className={isDrillRunning ? 'spin' : ''} />
+            <span>{isDrillRunning ? 'Dispatching Drill...' : '🚨 Disaster Simulation Drill'}</span>
+          </button>
 
           <button 
             onClick={fetchIncidents}

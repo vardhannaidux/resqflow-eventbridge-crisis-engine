@@ -1,12 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: "ResQFlow — Intelligent Event-Driven Emergency Response and Resource
-  Orchestration Platform Primary Region: ap-south-2 (Asia Pacific - Hyderabad)\n"
+  Orchestration Platform Primary Region: ap-south-2 (Asia Pacific - Hyderabad) Enterprise
+  Edition: EventBridge Archive & Replay, SQS Dead-Letter Queues, and AWS X-Ray Tracing\n"
 Globals:
   Function:
     Timeout: 30
     MemorySize: 256
     Runtime: python3.12
+    Tracing: Active
     Environment:
       Variables:
         TABLE_NAME:
@@ -15,6 +17,8 @@ Globals:
           Ref: EventBus
         SNS_TOPIC_ARN:
           Ref: AlertsTopic
+        DEAD_LETTER_QUEUE_URL:
+          Ref: ResQFlowDeadLetterQueue
         APP_REGION:
           Ref: AWS::Region
 Resources:
@@ -38,6 +42,36 @@ Resources:
     Type: AWS::Events::EventBus
     Properties:
       Name: resqflow-event-bus
+  ResQFlowEventArchive:
+    Type: AWS::Events::Archive
+    Properties:
+      ArchiveName: ResQFlow-EventArchive
+      SourceArn:
+        Fn::GetAtt:
+        - EventBus
+        - Arn
+      Description: Comprehensive disaster event audit trail and replay archive
+      RetentionDays: 14
+  ResQFlowDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ResQFlow-DeadLetterQueue
+      MessageRetentionPeriod: 1209600
+  ResQFlowDeadLetterQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+      - Ref: ResQFlowDeadLetterQueue
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: events.amazonaws.com
+          Action: sqs:SendMessage
+          Resource:
+            Fn::GetAtt:
+            - ResQFlowDeadLetterQueue
+            - Arn
   AlertsTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -66,7 +100,7 @@ Resources:
     Properties:
       FunctionName: ResQFlow-IngestionFunction
       CodeUri: 
-        s3://resqflow-deploy-621962614200-ap-south-2/7d8add563c106c1bcea15fea5f361e6e
+        s3://resqflow-deploy-621962614200-ap-south-2/02f8fb7702ec7d83a3692959812c1e09
       Handler: app.lambda_handler
       Description: Ingests emergency incidents, stores in DynamoDB, and emits 
         IncidentReported
@@ -77,6 +111,11 @@ Resources:
       - EventBridgePutEventsPolicy:
           EventBusName:
             Ref: EventBus
+      - SQSSendMessagePolicy:
+          QueueName:
+            Fn::GetAtt:
+            - ResQFlowDeadLetterQueue
+            - QueueName
       Events:
         CreateIncident:
           Type: HttpApi
@@ -99,6 +138,13 @@ Resources:
               Ref: ResQFlowHttpApi
             Path: /incidents/{incidentId}
             Method: GET
+        TriggerDrill:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ResQFlowHttpApi
+            Path: /incidents/drill
+            Method: POST
   ClassifierFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -126,6 +172,11 @@ Resources:
               - resqflow.incident
               detail-type:
               - IncidentReported
+            DeadLetterConfig:
+              Arn:
+                Fn::GetAtt:
+                - ResQFlowDeadLetterQueue
+                - Arn
   ResourceAllocationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -172,6 +223,8 @@ Resources:
           Fn::GetAtt:
           - NotificationFunction
           - Arn
+      Tracing:
+        Enabled: true
       Policies:
       - LambdaInvokePolicy:
           FunctionName:
@@ -190,6 +243,11 @@ Resources:
               - resqflow.incident
               detail-type:
               - IncidentClassified
+            DeadLetterConfig:
+              Arn:
+                Fn::GetAtt:
+                - ResQFlowDeadLetterQueue
+                - Arn
 Outputs:
   ApiEndpoint:
     Description: Base HTTP API Endpoint for ResQFlow
@@ -212,6 +270,28 @@ Outputs:
       - Arn
     Export:
       Name: ResQFlow-EventBusArn
+  EventArchiveArn:
+    Description: ResQFlow EventBridge Archive ARN
+    Value:
+      Fn::GetAtt:
+      - ResQFlowEventArchive
+      - Arn
+    Export:
+      Name: ResQFlow-EventArchiveArn
+  DeadLetterQueueUrl:
+    Description: SQS Dead-Letter Queue URL for Circuit Breaker Fault Recovery
+    Value:
+      Ref: ResQFlowDeadLetterQueue
+    Export:
+      Name: ResQFlow-DeadLetterQueueUrl
+  DeadLetterQueueArn:
+    Description: SQS Dead-Letter Queue ARN
+    Value:
+      Fn::GetAtt:
+      - ResQFlowDeadLetterQueue
+      - Arn
+    Export:
+      Name: ResQFlow-DeadLetterQueueArn
   AlertsTopicArn:
     Description: ResQFlow SNS Alerts Topic ARN
     Value:

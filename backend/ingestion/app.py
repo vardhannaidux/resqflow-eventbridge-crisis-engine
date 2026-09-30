@@ -215,6 +215,46 @@ def handle_get_incident_by_id(incident_id):
         "body": json.dumps(item, default=decimal_serializer)
     }
 
+def handle_drill_simulation():
+    """Generates a synchronized 3-incident multi-severity disaster simulation drill."""
+    drill_scenarios = [
+        {
+            "type": "FIRE",
+            "description": "Drill Alpha: Multi-floor commercial fire at Secunderabad complex",
+            "peopleAffected": 15,
+            "location": {"latitude": 17.4399, "longitude": 78.4983},
+            "reportedBy": "SIMULATION-DRILL-ALPHA"
+        },
+        {
+            "type": "MEDICAL",
+            "description": "Drill Bravo: Transit bus collision with severe casualties near Jubilee Hills",
+            "peopleAffected": 7,
+            "location": {"latitude": 17.4319, "longitude": 78.4073},
+            "reportedBy": "SIMULATION-DRILL-BRAVO"
+        },
+        {
+            "type": "ACCIDENT",
+            "description": "Drill Charlie: Hazardous vehicle spill on Hitec City Flyover",
+            "peopleAffected": 2,
+            "location": {"latitude": 17.4474, "longitude": 78.3762},
+            "reportedBy": "SIMULATION-DRILL-CHARLIE"
+        }
+    ]
+    created = []
+    for scenario in drill_scenarios:
+        res = handle_create_incident(scenario)
+        if res.get("statusCode") == 201:
+            created.append(json.loads(res.get("body", "{}")))
+
+    return {
+        "statusCode": 201,
+        "headers": CORS_HEADERS,
+        "body": json.dumps({
+            "message": "Synchronized multi-incident disaster drill triggered successfully",
+            "incidents": created
+        })
+    }
+
 def lambda_handler(event, context):
     logger.info("Received event: %s", json.dumps(event))
     
@@ -225,6 +265,9 @@ def lambda_handler(event, context):
         return {"statusCode": 200, "headers": CORS_HEADERS, "body": ""}
 
     if http_method == "POST":
+        if path.endswith("/drill"):
+            return handle_drill_simulation()
+            
         raw_body = event.get("body", "{}")
         if isinstance(raw_body, str):
             try:
