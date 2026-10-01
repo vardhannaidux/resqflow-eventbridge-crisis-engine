@@ -2,6 +2,7 @@ import json
 import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime, timezone
+import urllib.parse
 import sys
 import os
 
@@ -57,12 +58,19 @@ class ResQFlowDevServer(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path == "/incidents" or self.path == "/incidents/":
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path
+        query_params = urllib.parse.parse_qs(parsed_url.query)
+        status_filter = query_params.get("status", [None])[0]
+
+        if path == "/incidents" or path == "/incidents/":
             items = list(LOCAL_INCIDENTS_STORE.values())
+            if status_filter:
+                items = [item for item in items if item.get("status") == status_filter]
             items.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
-            self._send_response(200, {"incidents": items})
-        elif self.path.startswith("/incidents/"):
-            inc_id = self.path.split("/incidents/")[1].split("?")[0]
+            self._send_response(200, {"incidents": items, "filter": status_filter})
+        elif path.startswith("/incidents/"):
+            inc_id = path.split("/incidents/")[1].split("/")[0]
             item = LOCAL_INCIDENTS_STORE.get(inc_id)
             if item:
                 self._send_response(200, item)

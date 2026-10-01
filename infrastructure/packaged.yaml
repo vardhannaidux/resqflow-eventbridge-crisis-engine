@@ -148,6 +148,9 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       Name: ResQFlow-IngestionApi
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 100
+        ThrottlingRateLimit: 50
       CorsConfiguration:
         AllowOrigins:
         - '*'
@@ -167,7 +170,7 @@ Resources:
     Properties:
       FunctionName: ResQFlow-IngestionFunction
       CodeUri: 
-        s3://resqflow-deploy-621962614200-ap-south-2/8ccd5f0b2e17d2ac0dd112de617bef08
+        s3://resqflow-deploy-621962614200-ap-south-2/c294be0e7845a46c8e3de64a490e50b9
       Handler: app.lambda_handler
       Description: Ingests emergency incidents, stores in DynamoDB, and emits 
         IncidentReported
@@ -175,6 +178,12 @@ Resources:
       - DynamoDBCrudPolicy:
           TableName:
             Ref: IncidentsTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:Query
+          Resource:
+            Fn::Sub: ${IncidentsTable.Arn}/index/*
       - EventBridgePutEventsPolicy:
           EventBusName:
             Ref: EventBus
@@ -281,6 +290,13 @@ Resources:
             Fn::GetAtt:
             - AlertsTopic
             - TopicName
+  StateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: 
+          /aws/vendedlogs/states/ResQFlowIncidentWorkflow-${AWS::StackName}
+      RetentionInDays: 14
   ResQFlowStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
@@ -299,6 +315,15 @@ Resources:
           - Arn
       Tracing:
         Enabled: true
+      Logging:
+        Destinations:
+        - CloudWatchLogsLogGroup:
+            LogGroupArn:
+              Fn::GetAtt:
+              - StateMachineLogGroup
+              - Arn
+        IncludeExecutionData: true
+        Level: ALL
       Policies:
       - LambdaInvokePolicy:
           FunctionName:
@@ -306,6 +331,20 @@ Resources:
       - LambdaInvokePolicy:
           FunctionName:
             Ref: NotificationFunction
+      - Statement:
+        - Effect: Allow
+          Action:
+          - logs:CreateLogDelivery
+          - logs:CreateLogStream
+          - logs:GetLogDelivery
+          - logs:UpdateLogDelivery
+          - logs:DeleteLogDelivery
+          - logs:ListLogDeliveries
+          - logs:PutLogEvents
+          - logs:PutResourcePolicy
+          - logs:DescribeResourcePolicies
+          - logs:DescribeLogGroups
+          Resource: '*'
       Events:
         IncidentClassifiedRule:
           Type: EventBridgeRule
@@ -394,3 +433,11 @@ Outputs:
       Ref: ResQFlowStateMachine
     Export:
       Name: ResQFlow-StateMachineArn
+  StateMachineLogGroupArn:
+    Description: ResQFlow Step Functions CloudWatch Execution Log Group ARN
+    Value:
+      Fn::GetAtt:
+      - StateMachineLogGroup
+      - Arn
+    Export:
+      Name: ResQFlow-StateMachineLogGroupArn

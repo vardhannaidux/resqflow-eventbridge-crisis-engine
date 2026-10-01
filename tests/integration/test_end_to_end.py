@@ -30,7 +30,7 @@ def test_live_end_to_end():
     print(f"Reported incident: {incident_id}")
 
     # 2. Wait for EventBridge -> Classifier -> Step Functions pipeline
-    time.sleep(5)
+    time.sleep(6)
 
     # 3. Query Incident by ID
     get_res = requests.get(f"{API_URL}/incidents/{incident_id}")
@@ -42,5 +42,25 @@ def test_live_end_to_end():
     assert incident["status"] in ["CLASSIFIED", "DISPATCHED"]
     assert "assignedTeam" in incident
 
-if __name__ == "__main__":
-    test_live_end_to_end()
+    # 4. Test GSI Query Filtering by status
+    gsi_res = requests.get(f"{API_URL}/incidents?status={incident['status']}")
+    assert gsi_res.status_code == 200
+    gsi_data = gsi_res.json()
+    assert "incidents" in gsi_data
+    found_ids = [inc["incidentId"] for inc in gsi_data["incidents"]]
+    assert incident_id in found_ids, f"Incident {incident_id} not found in GSI results"
+    print(f"GSI Query verified: {len(gsi_data['incidents'])} incidents with status {incident['status']}")
+
+    # 5. Test Incident Resolution Lifecycle
+    resolve_res = requests.post(f"{API_URL}/incidents/{incident_id}/resolve", json={"notes": "Integration test verified resolved"})
+    assert resolve_res.status_code == 200
+    resolve_data = resolve_res.json()
+    assert resolve_data["status"] == "RESOLVED"
+    print(f"Incident {incident_id} successfully marked as RESOLVED")
+
+    # 6. Test Multi-Incident Disaster Simulation Drill
+    drill_res = requests.post(f"{API_URL}/incidents/drill")
+    assert drill_res.status_code == 201
+    drill_data = drill_res.json()
+    assert len(drill_data.get("incidents", [])) == 3
+    print(f"Drill verified: {len(drill_data['incidents'])} incidents dispatched in parallel")

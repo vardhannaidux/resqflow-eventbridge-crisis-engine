@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 import boto3
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
@@ -192,10 +193,34 @@ def handle_create_incident(body):
         "body": json.dumps(response_payload)
     }
 
-def handle_get_incidents():
-    """Returns all incidents from DynamoDB for the React dashboard."""
+def handle_get_incidents(status_filter=None):
+    """Returns all incidents or incidents filtered by status using GSI StatusCreatedAtIndex."""
+    if status_filter:
+        try:
+            logger.info(json.dumps({
+                "operation": "DynamoDB_GSI_Query",
+                "indexName": "StatusCreatedAtIndex",
+                "statusFilter": status_filter
+            }))
+            response = table.query(
+                IndexName="StatusCreatedAtIndex",
+                KeyConditionExpression=Key("status").eq(status_filter),
+                ScanIndexForward=False,
+                Limit=50
+            )
+            items = response.get("Items", [])
+            return {
+                "statusCode": 200,
+                "headers": CORS_HEADERS,
+                "body": json.dumps({"incidents": items, "filter": status_filter, "source": "GSI"}, default=decimal_serializer)
+            }
+        except Exception as e:
+            logger.warning(f"GSI query failed, falling back to scan: {e}")
+
     scan_result = table.scan(Limit=50)
     items = scan_result.get("Items", [])
+    if status_filter:
+        items = [item for item in items if item.get("status") == status_filter]
     # Sort items by createdAt descending
     items.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
     return {
@@ -377,7 +402,9 @@ def lambda_handler(event, context):
         incident_id = path_parameters.get("incidentId")
         if incident_id:
             return handle_get_incident_by_id(incident_id)
-        return handle_get_incidents()
+        query_params = event.get("queryStringParameters") or {}
+        status_filter = query_params.get("status") if isinstance(query_params, dict) else None
+        return handle_get_incidents(status_filter=status_filter)
 
     return {
         "statusCode": 405,
