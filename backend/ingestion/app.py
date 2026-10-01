@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 import boto3
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -102,6 +103,10 @@ def handle_create_incident(body):
         "peopleAffected": cleaned["peopleAffected"],
         "latitude": cleaned["latitude"],
         "longitude": cleaned["longitude"],
+        "location": {
+            "latitude": cleaned["latitude"],
+            "longitude": cleaned["longitude"]
+        },
         "reportedBy": cleaned["reportedBy"],
         "assignedTeam": "NONE",
         "hospital": "NONE",
@@ -255,6 +260,83 @@ def handle_drill_simulation():
         })
     }
 
+def handle_resolve_incident(incident_id, body):
+    """Resolves an active incident and emits IncidentResolved domain event."""
+    if not incident_id:
+        return {
+            "statusCode": 400,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"error": "incidentId path parameter is required"})
+        }
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    idempotency_key = f"{incident_id}:IncidentResolved:1"
+    notes = body.get("notes") or "Incident resolved and cleared by Emergency Command Center."
+
+    try:
+        table.update_item(
+            Key={"incidentId": incident_id},
+            UpdateExpression="SET #st = :st, resolvedAt = :r, updatedAt = :u, lastEventId = :eid, resolutionNotes = :notes",
+            ConditionExpression="attribute_exists(incidentId)",
+            ExpressionAttributeNames={
+                "#st": "status"
+            },
+            ExpressionAttributeValues={
+                ":st": "RESOLVED",
+                ":r": now_iso,
+                ":u": now_iso,
+                ":eid": idempotency_key,
+                ":notes": notes
+            }
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return {
+                "statusCode": 404,
+                "headers": CORS_HEADERS,
+                "body": json.dumps({"error": f"Incident {incident_id} not found"})
+            }
+        logger.error("Failed to resolve incident %s: %s", incident_id, str(e))
+        raise
+
+    event_detail = {
+        "incidentId": incident_id,
+        "status": "RESOLVED",
+        "resolvedAt": now_iso,
+        "notes": notes,
+        "correlationId": incident_id,
+        "idempotencyKey": idempotency_key
+    }
+
+    eventbridge.put_events(
+        Entries=[
+            {
+                "Source": "resqflow.incident",
+                "DetailType": "IncidentResolved",
+                "Detail": json.dumps(event_detail),
+                "EventBusName": EVENT_BUS_NAME,
+                "Time": datetime.now(timezone.utc)
+            }
+        ]
+    )
+
+    logger.info(json.dumps({
+        "operation": "IncidentResolved_Success",
+        "incidentId": incident_id,
+        "resolvedAt": now_iso
+    }))
+
+    return {
+        "statusCode": 200,
+        "headers": CORS_HEADERS,
+        "body": json.dumps({
+            "message": f"Incident {incident_id} marked as RESOLVED",
+            "incidentId": incident_id,
+            "status": "RESOLVED",
+            "resolvedAt": now_iso
+        })
+    }
+
 def lambda_handler(event, context):
     logger.info("Received event: %s", json.dumps(event))
     
@@ -267,6 +349,14 @@ def lambda_handler(event, context):
     if http_method == "POST":
         if path.endswith("/drill"):
             return handle_drill_simulation()
+        elif path.endswith("/resolve"):
+            path_parameters = event.get("pathParameters") or {}
+            incident_id = path_parameters.get("incidentId")
+            if not incident_id and "/incidents/" in path:
+                incident_id = path.split("/incidents/")[1].split("/resolve")[0]
+            raw_body = event.get("body", "{}")
+            body = json.loads(raw_body) if isinstance(raw_body, str) and raw_body else (raw_body or {})
+            return handle_resolve_incident(incident_id, body)
             
         raw_body = event.get("body", "{}")
         if isinstance(raw_body, str):

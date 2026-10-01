@@ -320,3 +320,27 @@ header {
 .badge-classified { background: rgba(168, 85, 247, 0.15); color: var(--status-classified); border: 1px solid rgba(168, 85, 247, 0.3); }
 .badge-dispatched { background: rgba(34, 197, 94, 0.15); color: var(--status-dispatched); border: 1px solid rgba(34, 197, 94, 0.3); }
 .badge-resolved { background: rgba(16, 185, 129, 0.15); color: var(--status-resolved); border: 1px solid rgba(16, 185, 129, 0.3); }
+
+/* Action Buttons */
+.btn-resolve {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #10b981;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-resolve:hover {
+  background: rgba(16, 185, 129, 0.35);
+  border-color: #10b981;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}

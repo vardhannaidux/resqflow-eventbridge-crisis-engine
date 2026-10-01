@@ -79,6 +79,23 @@ export default function App() {
     }
   };
 
+  const handleResolveIncident = async (incidentId) => {
+    try {
+      const res = await fetch(`${apiEndpoint}/incidents/${incidentId}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: 'Incident cleared by field responder command.' })
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP ${res.status}`);
+      }
+      await fetchIncidents();
+    } catch (err) {
+      alert(`Error resolving incident: ${err.message}`);
+    }
+  };
+
   return (
     <div className="app-container">
       {/* Header */}
@@ -180,6 +197,7 @@ export default function App() {
         />
         <IncidentTable 
           incidents={incidents} 
+          onResolveIncident={handleResolveIncident}
         />
       </div>
     </div>

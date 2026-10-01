@@ -1,6 +1,7 @@
-import { ShieldAlert, MapPin, Clock, Truck, Building2 } from 'lucide-react';
+import React from 'react';
+import { ShieldAlert, MapPin, Clock, Truck, Building2, Check, CheckCircle2 } from 'lucide-react';
 
-export default function IncidentTable({ incidents, onSelectIncident }) {
+export default function IncidentTable({ incidents, onResolveIncident }) {
   const getSeverityBadge = (severity) => {
     switch (severity) {
       case 'CRITICAL':
@@ -53,12 +54,13 @@ export default function IncidentTable({ incidents, onSelectIncident }) {
               <th>Deployment & Medical Center</th>
               <th>Location</th>
               <th>Time</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
             {incidents.length === 0 ? (
               <tr>
-                <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
+                <td colSpan="9" style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
                   No active incidents recorded. Submit the emergency form to test live ingestion.
                 </td>
               </tr>
@@ -105,6 +107,21 @@ export default function IncidentTable({ incidents, onSelectIncident }) {
                       <Clock size={12} />
                       <span>{incident.createdAt ? new Date(incident.createdAt).toLocaleTimeString() : 'Just now'}</span>
                     </div>
+                  </td>
+                  <td>
+                    {incident.status === 'RESOLVED' ? (
+                      <span style={{ color: '#10b981', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                        <CheckCircle2 size={13} /> Resolved
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onResolveIncident && onResolveIncident(incident.incidentId)}
+                        className="btn-resolve"
+                        title="Mark emergency as resolved and emit IncidentResolved event"
+                      >
+                        <Check size={12} /> Resolve
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))

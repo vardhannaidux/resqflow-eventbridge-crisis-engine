@@ -31,9 +31,22 @@ Resources:
       AttributeDefinitions:
         - AttributeName: incidentId
           AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
       KeySchema:
         - AttributeName: incidentId
           KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusCreatedAtIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: false
       Tags:
@@ -79,13 +92,59 @@ Resources:
             Resource: !GetAtt ResQFlowDeadLetterQueue.Arn
 
   # ==========================================================
-  # 4. NOTIFICATION LAYER (Amazon SNS)
+  # 4. NOTIFICATION & AUDIT LAYER (Amazon SNS & Audit Queue)
   # ==========================================================
   AlertsTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: ResQFlowAlerts
       DisplayName: ResQFlow Emergency Response Alerts
+
+  ResQFlowAlertAuditQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ResQFlow-AlertAuditQueue
+      MessageRetentionPeriod: 1209600 # 14 days
+
+  ResQFlowAlertAuditQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ResQFlowAlertAuditQueue
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - sns.amazonaws.com
+                - events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt ResQFlowAlertAuditQueue.Arn
+
+  AlertsTopicToAuditQueueSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertsTopic
+      Protocol: sqs
+      Endpoint: !GetAtt ResQFlowAlertAuditQueue.Arn
+      RawMessageDelivery: false
+
+  DispatchTelemetryRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: !Ref EventBus
+      Name: ResQFlow-DispatchTelemetryRule
+      Description: Captures ResourceAllocated, TeamDispatched, and IncidentResolved domain events
+      EventPattern:
+        source:
+          - resqflow.incident
+        detail-type:
+          - ResourceAllocated
+          - TeamDispatched
+          - IncidentResolved
+      Targets:
+        - Id: DispatchAuditQueueTarget
+          Arn: !GetAtt ResQFlowAlertAuditQueue.Arn
 
   # ==========================================================
   # 5. INGESTION API (Amazon API Gateway HTTP API)
@@ -150,6 +209,12 @@ Resources:
           Properties:
             ApiId: !Ref ResQFlowHttpApi
             Path: /incidents/drill
+            Method: POST
+        ResolveIncident:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ResQFlowHttpApi
+            Path: /incidents/{incidentId}/resolve
             Method: POST
 
   # ==========================================================
@@ -283,6 +348,18 @@ Outputs:
     Value: !Ref AlertsTopic
     Export:
       Name: ResQFlow-AlertsTopicArn
+
+  AlertAuditQueueUrl:
+    Description: SQS Queue URL capturing SNS emergency broadcasts and EventBridge dispatch telemetry
+    Value: !Ref ResQFlowAlertAuditQueue
+    Export:
+      Name: ResQFlow-AlertAuditQueueUrl
+
+  AlertAuditQueueArn:
+    Description: SQS Queue ARN capturing SNS emergency broadcasts and EventBridge dispatch telemetry
+    Value: !GetAtt ResQFlowAlertAuditQueue.Arn
+    Export:
+      Name: ResQFlow-AlertAuditQueueArn
 
   StateMachineArn:
     Description: ResQFlow Step Functions Orchestrator ARN

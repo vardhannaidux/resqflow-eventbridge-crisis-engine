@@ -30,9 +30,22 @@ Resources:
       AttributeDefinitions:
       - AttributeName: incidentId
         AttributeType: S
+      - AttributeName: status
+        AttributeType: S
+      - AttributeName: createdAt
+        AttributeType: S
       KeySchema:
       - AttributeName: incidentId
         KeyType: HASH
+      GlobalSecondaryIndexes:
+      - IndexName: StatusCreatedAtIndex
+        KeySchema:
+        - AttributeName: status
+          KeyType: HASH
+        - AttributeName: createdAt
+          KeyType: RANGE
+        Projection:
+          ProjectionType: ALL
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: false
       Tags:
@@ -77,6 +90,60 @@ Resources:
     Properties:
       TopicName: ResQFlowAlerts
       DisplayName: ResQFlow Emergency Response Alerts
+  ResQFlowAlertAuditQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ResQFlow-AlertAuditQueue
+      MessageRetentionPeriod: 1209600
+  ResQFlowAlertAuditQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+      - Ref: ResQFlowAlertAuditQueue
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - sns.amazonaws.com
+            - events.amazonaws.com
+          Action: sqs:SendMessage
+          Resource:
+            Fn::GetAtt:
+            - ResQFlowAlertAuditQueue
+            - Arn
+  AlertsTopicToAuditQueueSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn:
+        Ref: AlertsTopic
+      Protocol: sqs
+      Endpoint:
+        Fn::GetAtt:
+        - ResQFlowAlertAuditQueue
+        - Arn
+      RawMessageDelivery: false
+  DispatchTelemetryRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName:
+        Ref: EventBus
+      Name: ResQFlow-DispatchTelemetryRule
+      Description: Captures ResourceAllocated, TeamDispatched, and 
+        IncidentResolved domain events
+      EventPattern:
+        source:
+        - resqflow.incident
+        detail-type:
+        - ResourceAllocated
+        - TeamDispatched
+        - IncidentResolved
+      Targets:
+      - Id: DispatchAuditQueueTarget
+        Arn:
+          Fn::GetAtt:
+          - ResQFlowAlertAuditQueue
+          - Arn
   ResQFlowHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -100,7 +167,7 @@ Resources:
     Properties:
       FunctionName: ResQFlow-IngestionFunction
       CodeUri: 
-        s3://resqflow-deploy-621962614200-ap-south-2/02f8fb7702ec7d83a3692959812c1e09
+        s3://resqflow-deploy-621962614200-ap-south-2/8ccd5f0b2e17d2ac0dd112de617bef08
       Handler: app.lambda_handler
       Description: Ingests emergency incidents, stores in DynamoDB, and emits 
         IncidentReported
@@ -145,12 +212,19 @@ Resources:
               Ref: ResQFlowHttpApi
             Path: /incidents/drill
             Method: POST
+        ResolveIncident:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: ResQFlowHttpApi
+            Path: /incidents/{incidentId}/resolve
+            Method: POST
   ClassifierFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: ResQFlow-ClassifierFunction
       CodeUri: 
-        s3://resqflow-deploy-621962614200-ap-south-2/e35019d16270ed76707095d626ec0eea
+        s3://resqflow-deploy-621962614200-ap-south-2/3afacb8693dcc755ff048613b55b9145
       Handler: app.lambda_handler
       Description: Classifies incident severity deterministically and emits 
         IncidentClassified
@@ -182,7 +256,7 @@ Resources:
     Properties:
       FunctionName: ResQFlow-ResourceAllocationFunction
       CodeUri: 
-        s3://resqflow-deploy-621962614200-ap-south-2/bc78783ceaee2281e12d93941ea3b95a
+        s3://resqflow-deploy-621962614200-ap-south-2/214e5a7b37d21d16c2bf1b3d67a1e460
       Handler: app.lambda_handler
       Description: Allocates response teams and hospital facilities based on 
         severity
@@ -198,7 +272,7 @@ Resources:
     Properties:
       FunctionName: ResQFlow-NotificationFunction
       CodeUri: 
-        s3://resqflow-deploy-621962614200-ap-south-2/f95d6ac477d1a874958ce5ca7e0d1440
+        s3://resqflow-deploy-621962614200-ap-south-2/281769eda92ca589a2e06719628e1997
       Handler: app.lambda_handler
       Description: Dispatches broadcast SMS/Email alerts via Amazon SNS
       Policies:
@@ -298,6 +372,22 @@ Outputs:
       Ref: AlertsTopic
     Export:
       Name: ResQFlow-AlertsTopicArn
+  AlertAuditQueueUrl:
+    Description: SQS Queue URL capturing SNS emergency broadcasts and 
+      EventBridge dispatch telemetry
+    Value:
+      Ref: ResQFlowAlertAuditQueue
+    Export:
+      Name: ResQFlow-AlertAuditQueueUrl
+  AlertAuditQueueArn:
+    Description: SQS Queue ARN capturing SNS emergency broadcasts and 
+      EventBridge dispatch telemetry
+    Value:
+      Fn::GetAtt:
+      - ResQFlowAlertAuditQueue
+      - Arn
+    Export:
+      Name: ResQFlow-AlertAuditQueueArn
   StateMachineArn:
     Description: ResQFlow Step Functions Orchestrator ARN
     Value:
