@@ -6,6 +6,7 @@
 [![Services](https://img.shields.io/badge/AWS%20Services-16%20Production%20Services-2563EB.svg)](AWS_SERVICE_CATALOG_EXPANSION.md)
 [![PyTest Status](https://img.shields.io/badge/Tests-59%20Passed%20(100%25)-success.svg)](TESTING.md)
 [![Crisis SLA](https://img.shields.io/badge/Crisis%20SLA-%3C450ms%20Intake--to--Dispatch-7C3AED.svg)](ARCHITECTURE.md)
+[![Visual Catalog](https://img.shields.io/badge/Gallery-54%20Screens%20%26%20Images-9333EA.svg)](docs/PLATFORM_GALLERY.md)
 
 > **ResQFlow** is a production-grade, serverless emergency dispatch and multi-agency crisis orchestration platform engineered for high-concurrency, low-latency disaster response. Built natively on **Amazon EventBridge** across a dual-region cloud topology (**`ap-south-2` Hyderabad Core** and **`ap-south-1` Mumbai Mesh**).
 
@@ -48,6 +49,8 @@ ResQFlow's production frontend is fully implemented and operational on [Live S3 
 |:---:|:---:|
 | ![Real-Time Crisis Analytics](docs/images/ui-operational-analytics.png) | ![Amazon Polly Voice Dispatch Radio](docs/images/ui-polly-voice-broadcast.png) |
 | *Dynamic incident distribution charts, response time SLA distributions, and live hospital trauma bed occupancy meters.* | *Instant hands-free neural text-to-speech audio broadcast channel delivering voice SITREPs directly to field responders.* |
+
+> 📖 **Browse the Full 54-Screen Visual Architecture Catalog:** For an exhaustive index of all screens, role-based dashboards (Commander, Responder, Medical, Admin), computer vision datasets, and decision DAGs, see [**docs/PLATFORM_GALLERY.md**](docs/PLATFORM_GALLERY.md).
 
 ---
 
