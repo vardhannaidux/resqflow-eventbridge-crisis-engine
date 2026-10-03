@@ -21,8 +21,7 @@ All screenshots represent live production interfaces verified against the deploy
 12. [Citizen Intake & Rapid Command Palette](#12-citizen-intake--rapid-command-palette)
 13. [Authentication, Registration & IAM](#13-authentication-registration--iam)
 14. [In-App Documentation & AWS Service Catalog](#14-in-app-documentation--aws-service-catalog)
-15. [Computer Vision Crisis Incident Datasets](#15-computer-vision-crisis-incident-datasets)
-16. [Real-World Operational Platform Deployment Context](#16-real-world-operational-platform-deployment-context)
+15. [Real-World Operational Platform Deployment Context](#15-real-world-operational-platform-deployment-context)
 
 ---
 
@@ -182,33 +181,7 @@ All screenshots represent live production interfaces verified against the deploy
 
 ---
 
-## 15. Computer Vision Crisis Incident Datasets
-
-These verified real-world hazard images are used by the **Amazon Rekognition Computer Vision Engine** for anti-spoofing and severity estimation:
-
-| 🕳️ Pothole Structural Damage | 🛠️ Road Surface Repair Completed |
-|:---:|:---:|
-| ![Pothole Damage](images/dataset-pothole-damage.jpg) | ![Pothole Repaired](images/dataset-pothole-repaired.jpg) |
-| *Severe road degradation flagged as HIGH severity traffic hazard.* | *Post-repair verification photo confirming hazard resolution.* |
-
-| 👷 Field Emergency Repair Team | 📱 Citizen Reporting Incident |
-|:---:|:---:|
-| ![Field Repair Team](images/dataset-field-repair-team.jpg) | ![Person Reporting](images/dataset-person-reporting.jpg) |
-| *Municipal ERT work crew deployed on-site.* | *Citizen capturing ground-level evidence via mobile intake.* |
-
-| 💡 Broken Infrastructure Streetlight | 💧 Critical Water Main Leakage |
-|:---:|:---:|
-| ![Broken Streetlight](images/dataset-broken-streetlight.jpg) | ![Water Leakage](images/dataset-water-leakage.jpg) |
-| *Public utility hazard flagged for municipal dispatch.* | *Infrastructure breach causing urban street flooding.* |
-
-| 🗑️ Hazardous Solid Waste Overflow |
-|:---:|
-| ![Waste Overflow](images/dataset-overflowing-waste.jpg) |
-| *Environmental health hazard requiring sanitation deployment.* |
-
----
-
-## 16. Real-World Operational Platform Deployment Context
+## 15. Real-World Operational Platform Deployment Context
 
 | 🏛️ Municipal Incident Command Room | 🌊 Monsoon Inundation Search & Rescue |
 |:---:|:---:|
