@@ -1,15 +1,27 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import Header from './components/Header';
-import SimulationBanner from './components/SimulationBanner';
-import KPICards from './components/KPICards';
-import IncidentMap from './components/IncidentMap';
-import IncidentFeed from './components/IncidentFeed';
-import IncidentDetailModal from './components/IncidentDetailModal';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import AppShell from './components/layout/AppShell';
+import DashboardPage from './pages/DashboardPage';
+import IncidentsPage from './pages/IncidentsPage';
+import IncidentDetailPage from './pages/IncidentDetailPage';
+import ResourcesPage from './pages/ResourcesPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import EventStreamPage from './pages/EventStreamPage';
+import WorkflowsPage from './pages/WorkflowsPage';
+import NotificationsPage from './pages/NotificationsPage';
+import SettingsPage from './pages/SettingsPage';
+import AIAssistantPage from './pages/AIAssistantPage';
+import IoTMeshPage from './pages/IoTMeshPage';
+import XRayTracingPage from './pages/XRayTracingPage';
+import RekognitionPage from './pages/RekognitionPage';
+import LocationRoutingPage from './pages/LocationRoutingPage';
+import DocumentationPage from './pages/DocumentationPage';
+import PlatformOverviewPage from './pages/PlatformOverviewPage';
+import LandingPage from './pages/LandingPage';
+import AuthPage from './pages/AuthPage';
+
 import IncidentFormModal from './components/IncidentFormModal';
-import ResourcePanel from './components/ResourcePanel';
-import ActivityTimeline from './components/ActivityTimeline';
 import CommandPalette from './components/CommandPalette';
-import NotificationDrawer from './components/NotificationDrawer';
 import ToastContainer from './components/ToastContainer';
 
 import { 
@@ -18,46 +30,77 @@ import {
   getSoundMuted 
 } from './utils/sound';
 
-import { 
-  Layers, 
-  MapPin, 
-  ShieldAlert, 
-  Truck, 
-  History, 
-  LayoutDashboard 
-} from 'lucide-react';
-
 const DEFAULT_API_ENDPOINT = import.meta.env.VITE_API_ENDPOINT || 'https://ezdw12h7z5.execute-api.ap-south-2.amazonaws.com';
 
 export default function App() {
   const [apiEndpoint, setApiEndpoint] = useState(DEFAULT_API_ENDPOINT);
   const [incidents, setIncidents] = useState([]);
-  const [selectedIncident, setSelectedIncident] = useState(null);
 
-  // Loading & Polling States
+  // Loading & Connectivity States
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDrillRunning, setIsDrillRunning] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState({ online: true, latencyMs: null });
+  const [connectionStatus, setConnectionStatus] = useState({ online: true, latencyMs: 45 });
 
-  // Modal & Drawer State
+  // Modal State
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [reportModalLocation, setReportModalLocation] = useState(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
+
+  const handleOpenReportModal = (loc = null) => {
+    setReportModalLocation(loc);
+    setIsReportModalOpen(true);
+  };
+
+  const handleCloseReportModal = () => {
+    setIsReportModalOpen(false);
+    setReportModalLocation(null);
+  };
 
   // Preference & Feature Toggles
   const [isSoundMutedState, setIsSoundMutedState] = useState(true);
-  const [isDarkTheme, setIsDarkTheme] = useState(true);
-  const [showCinematicBg, setShowCinematicBg] = useState(true);
-  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('operations'); // 'operations' | 'fleet' | 'telemetry'
+
+  // Authenticated Operator Session State
+  const DEFAULT_OPERATOR = {
+    fullName: 'Commander Elena Vance',
+    email: 'lead@resqflow.gov',
+    operatorId: 'OPS-CMD-01',
+    organization: 'Hyderabad Metropolitan Sector Command',
+    role: 'Dispatch Supervisor',
+    authenticatedAt: new Date().toISOString()
+  };
+
+  const [authUser, setAuthUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('resqflow_auth_user');
+      return stored ? JSON.parse(stored) : DEFAULT_OPERATOR;
+    } catch {
+      return DEFAULT_OPERATOR;
+    }
+  });
+
+  const handleLoginSuccess = (user) => {
+    setAuthUser(user);
+    addToast({
+      type: 'info',
+      title: 'Operator Authenticated',
+      message: `Active session initialized for ${user.fullName} (${user.role}).`
+    });
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('resqflow_auth_user');
+    setAuthUser(null);
+    addToast({
+      type: 'info',
+      title: 'Session Terminated',
+      message: 'Operator signed out of command center.'
+    });
+  };
 
   // Toast System
   const [toasts, setToasts] = useState([]);
-
-  // Live Broadcast Notifications
-  const [notifications, setNotifications] = useState([]);
   const previousIncidentCountRef = useRef(0);
 
   const addToast = useCallback((toast) => {
@@ -91,44 +134,27 @@ export default function App() {
       setLastUpdated(new Date().toISOString());
       setConnectionStatus({ online: true, latencyMs: latency });
 
-      // Detect newly arrived incidents for tactical notification & audio cue
+      // Audio cue for newly arrived incidents
       if (previousIncidentCountRef.current > 0 && loadedIncidents.length > previousIncidentCountRef.current) {
-        const diff = loadedIncidents.length - previousIncidentCountRef.current;
         const newest = loadedIncidents[0];
         playTacticalBlip(newest?.severity === 'CRITICAL' ? 'critical' : 'info');
-        
         addToast({
           type: newest?.severity === 'CRITICAL' ? 'warning' : 'info',
-          title: '🚨 Emergency Incident Ingested',
-          message: `${newest?.type || 'New emergency'} reported in Hyderabad sector. State machine dispatch initiated.`
+          title: '🚨 Emergency Ingested',
+          message: `${newest?.type || 'Emergency'} registered. Triage state machine triggered.`
         });
-
-        // Add to broadcast notification drawer
-        setNotifications(prev => [
-          {
-            id: `notif-${Date.now()}`,
-            incident: newest,
-            type: 'INGESTED',
-            severity: newest?.severity,
-            title: `[${newest?.severity || 'REPORTED'}] ${newest?.incidentId}: ${newest?.type}`,
-            message: newest?.description || 'Emergency incident ingested into ResQFlow pipeline.',
-            target: newest?.assignedTeam || 'Regional Command Units',
-            timestamp: new Date().toISOString()
-          },
-          ...prev
-        ]);
       }
       previousIncidentCountRef.current = loadedIncidents.length;
 
     } catch (err) {
-      console.warn('Gateway connection error:', err.message);
+      console.warn('Gateway connection notice:', err.message);
       setConnectionStatus({ online: false, latencyMs: null });
     } finally {
       setIsRefreshing(false);
     }
   }, [apiEndpoint, addToast]);
 
-  // Polling Interval (every 4 seconds for real-time EventBridge updates)
+  // Polling Interval (every 4 seconds for EventBridge sync)
   useEffect(() => {
     fetchIncidents();
     const interval = setInterval(fetchIncidents, 4000);
@@ -143,23 +169,12 @@ export default function App() {
         setIsCommandPaletteOpen(prev => !prev);
       } else if (e.key === 'Escape') {
         setIsReportModalOpen(false);
-        setIsDetailModalOpen(false);
         setIsCommandPaletteOpen(false);
-        setIsNotificationDrawerOpen(false);
       }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
-
-  // Theme Sync to body element
-  useEffect(() => {
-    if (isDarkTheme) {
-      document.body.classList.remove('theme-tactical');
-    } else {
-      document.body.classList.add('theme-tactical');
-    }
-  }, [isDarkTheme]);
 
   // Report New Incident Handler
   const handleReportIncident = async (payload) => {
@@ -184,20 +199,21 @@ export default function App() {
         message: `Incident ${data.incidentId} published to EventBridge. Step Functions triage activated.`
       });
 
-      setIsReportModalOpen(false);
+      handleCloseReportModal();
       await fetchIncidents();
     } catch (err) {
+      playTacticalBlip('info');
       addToast({
         type: 'error',
         title: 'Ingestion Error',
-        message: err.message || 'Failed to submit incident to API Gateway.'
+        message: err.message || 'Unable to communicate with ingestion Lambda.'
       });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Trigger Multi-Incident Simulation Drill Handler
+  // Launch Disaster Drill Handler
   const handleTriggerDrill = async () => {
     setIsDrillRunning(true);
     try {
@@ -207,7 +223,8 @@ export default function App() {
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${res.status}`);
       }
 
       const data = await res.json();
@@ -215,256 +232,263 @@ export default function App() {
       addToast({
         type: 'warning',
         title: '🚨 Disaster Drill Initiated',
-        message: '3 synchronized multi-tier emergencies dispatched across Hyderabad Sector.'
+        message: `Simulated ${data.incidents?.length || 3} emergencies across Hyderabad sectors.`
       });
 
       await fetchIncidents();
     } catch (err) {
       addToast({
         type: 'error',
-        title: 'Drill Execution Error',
-        message: err.message || 'Failed to trigger cloud simulation drill.'
+        title: 'Drill Trigger Failed',
+        message: err.message
       });
     } finally {
       setIsDrillRunning(false);
     }
   };
 
-  // Inject Deterministic Demo Scenario Handler
+  // Scenario Injection Handler
   const handleInjectScenario = (scenario) => {
     handleReportIncident({
-      type: scenario.category,
-      description: `${scenario.title}: ${scenario.description}`,
-      peopleAffected: scenario.peopleAffected,
+      description: scenario.description,
+      type: scenario.type,
       location: scenario.location,
-      reportedBy: scenario.reportedBy
+      peopleAffected: scenario.peopleAffected,
+      reportedBy: scenario.reportedBy || 'SCENARIO-INJECTOR'
     });
   };
 
   // Resolve Incident Handler
   const handleResolveIncident = async (incidentId, notes = '') => {
     try {
-      const res = await fetch(`${apiEndpoint}/incidents/${incidentId}/resolve`, {
+      const res = await fetch(`${apiEndpoint}/incidents/${encodeURIComponent(incidentId)}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: notes || 'Incident cleared by command center supervisor.' })
+        body: JSON.stringify({
+          notes: notes || 'Incident cleared and verified by command center operator.'
+        })
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${res.status}`);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
       }
 
       playTacticalBlip('resolve');
       addToast({
         type: 'success',
-        title: 'Emergency Cleared & Stabilized',
-        message: `Incident ${incidentId} marked as RESOLVED. Telemetry archived.`
+        title: 'Incident Resolved',
+        message: `Emergency ${incidentId} marked as RESOLVED and published to EventBridge.`
       });
-
-      // Update selected incident in view if open
-      if (selectedIncident && selectedIncident.incidentId === incidentId) {
-        setSelectedIncident(prev => ({
-          ...prev,
-          status: 'RESOLVED',
-          resolvedAt: new Date().toISOString(),
-          resolutionNotes: notes
-        }));
-      }
 
       await fetchIncidents();
     } catch (err) {
       addToast({
         type: 'error',
         title: 'Resolution Failed',
-        message: err.message || 'Could not resolve incident on cloud backend.'
+        message: err.message
       });
     }
   };
 
-  const handleSelectIncident = (incident) => {
-    setSelectedIncident(incident);
-    setIsDetailModalOpen(true);
-  };
-
+  // Sound Toggle Handler
   const handleToggleSound = () => {
     const nextMuted = !isSoundMutedState;
-    setSoundMuted(nextMuted);
     setIsSoundMutedState(nextMuted);
+    setSoundMuted(nextMuted);
     addToast({
       type: 'info',
       title: nextMuted ? 'Audio Alerts Muted' : 'Audio Alerts Active',
-      message: nextMuted ? 'Tactical sound effects disabled.' : 'Subtle tactical audio cues enabled.'
+      message: nextMuted ? 'Tactical sound cues disabled.' : 'Tactical audio cues enabled.'
     });
   };
 
-  const handleToggleTheme = () => {
-    setIsDarkTheme(prev => !prev);
-  };
-
-  const handleToggleCinematicBg = () => {
-    setShowCinematicBg(prev => !prev);
-  };
-
   return (
-    <>
-      {/* 1. Cinematic Night-City Backdrop Layer */}
-      <div 
-        className={`cinematic-backdrop-layer ${!showCinematicBg ? 'hidden' : ''}`}
-        style={{ backgroundImage: `url('/night-city-bg.jpg')` }}
-        aria-hidden="true"
-      />
-      <div className="ambient-grid-overlay" aria-hidden="true" />
+    <BrowserRouter>
+      <Routes>
+        {/* 1. Public Swiss Editorial Landing Page with Event Pipeline Animation */}
+        <Route path="/" element={
+          <LandingPage 
+            incidents={incidents} 
+            connectionStatus={connectionStatus} 
+          />
+        } />
 
-      {/* 2. Main Mission Control Viewport */}
-      <div className="app-viewport">
-        {/* Global Command Header */}
-        <Header
-          apiEndpoint={apiEndpoint}
-          onApiEndpointChange={setApiEndpoint}
-          isRefreshing={isRefreshing}
-          lastUpdated={lastUpdated}
-          onRefresh={fetchIncidents}
-          onOpenReportModal={() => setIsReportModalOpen(true)}
-          onOpenDrillModal={handleTriggerDrill}
-          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-          onToggleNotifications={() => setIsNotificationDrawerOpen(prev => !prev)}
-          unreadAlertCount={notifications.length}
-          isDrillRunning={isDrillRunning}
-          isSoundMuted={isSoundMutedState}
-          onToggleSound={handleToggleSound}
-          isDarkTheme={isDarkTheme}
-          onToggleTheme={handleToggleTheme}
-          showCinematicBg={showCinematicBg}
-          onToggleCinematicBg={handleToggleCinematicBg}
-          connectionStatus={connectionStatus}
-        />
+        {/* 2. Public Auth Gateway (Sign In & Register) */}
+        <Route path="/login" element={
+          <AuthPage onLoginSuccess={handleLoginSuccess} />
+        } />
 
-        {/* Persistent Simulation & Drill Warning Banner */}
-        <SimulationBanner
-          onInjectScenario={handleInjectScenario}
-          onTriggerCloudDrill={handleTriggerDrill}
-          onResetDemoData={fetchIncidents}
-          isDrillRunning={isDrillRunning}
-        />
+        {/* 3. Operations Console Shell */}
+        <Route element={
+          <AppShell
+            incidents={incidents}
+            connectionStatus={connectionStatus}
+            isRefreshing={isRefreshing}
+            onRefresh={fetchIncidents}
+            onOpenReportModal={() => handleOpenReportModal()}
+            onTriggerDrill={handleTriggerDrill}
+            isDrillRunning={isDrillRunning}
+            authUser={authUser}
+            onLogout={handleLogout}
+          />
+        }>
+          {/* 0. Platform Overview */}
+          <Route path="/overview" element={
+            <PlatformOverviewPage
+              incidents={incidents}
+              onOpenReportModal={handleOpenReportModal}
+            />
+          } />
+          <Route path="/platform-overview" element={<Navigate to="/overview" replace />} />
 
-        {/* Situational Awareness Metric Cards */}
-        <KPICards incidents={incidents} />
+          {/* Operations Theatre */}
+          <Route path="/dashboard" element={
+            <DashboardPage
+              incidents={incidents}
+              onResolveIncident={handleResolveIncident}
+              onOpenReportModal={handleOpenReportModal}
+              onTriggerDrill={handleTriggerDrill}
+              onInjectScenario={handleInjectScenario}
+              isDrillRunning={isDrillRunning}
+              connectionStatus={connectionStatus}
+              lastUpdated={lastUpdated}
+            />
+          } />
 
-        {/* Operations Workspace Tab Navigation */}
-        <div className="workspace-views-tabs" role="tablist">
-          <button
-            role="tab"
-            aria-selected={activeWorkspaceTab === 'operations'}
-            className={`tab-nav-btn ${activeWorkspaceTab === 'operations' ? 'active' : ''}`}
-            onClick={() => setActiveWorkspaceTab('operations')}
-          >
-            <LayoutDashboard size={14} />
-            <span>Operations Center (Map & Incident Stream)</span>
-            <span className="tab-count-pill">{incidents.length}</span>
-          </button>
+          {/* 2. /incidents */}
+          <Route path="/incidents" element={
+            <IncidentsPage
+              incidents={incidents}
+              onResolveIncident={handleResolveIncident}
+              onOpenReportModal={() => setIsReportModalOpen(true)}
+            />
+          } />
 
-          <button
-            role="tab"
-            aria-selected={activeWorkspaceTab === 'fleet'}
-            className={`tab-nav-btn ${activeWorkspaceTab === 'fleet' ? 'active' : ''}`}
-            onClick={() => setActiveWorkspaceTab('fleet')}
-          >
-            <Truck size={14} />
-            <span>Response Fleet & Trauma Facilities</span>
-          </button>
+          {/* 3. /incidents/:incidentId */}
+          <Route path="/incidents/:incidentId" element={
+            <IncidentDetailPage
+              incidents={incidents}
+              onResolveIncident={handleResolveIncident}
+            />
+          } />
 
-          <button
-            role="tab"
-            aria-selected={activeWorkspaceTab === 'telemetry'}
-            className={`tab-nav-btn ${activeWorkspaceTab === 'telemetry' ? 'active' : ''}`}
-            onClick={() => setActiveWorkspaceTab('telemetry')}
-          >
-            <History size={14} />
-            <span>Serverless EventBridge Audit Stream</span>
-          </button>
-        </div>
+          {/* 4. /resources */}
+          <Route path="/resources" element={
+            <ResourcesPage
+              incidents={incidents}
+            />
+          } />
 
-        {/* Workspace Views Content */}
-        <main className="main-ops-grid">
-          {activeWorkspaceTab === 'operations' && (
-            <>
-              {/* Split Dashboard Row: Leaflet Geospatial Operations Map & Incident Command Feed */}
-              <div className="split-dashboard-row">
-                <IncidentMap 
-                  incidents={incidents} 
-                  selectedIncident={selectedIncident}
-                  onSelectIncident={handleSelectIncident}
-                />
-                <IncidentFeed 
-                  incidents={incidents}
-                  selectedIncident={selectedIncident}
-                  onSelectIncident={handleSelectIncident}
-                  onResolveIncident={handleResolveIncident}
-                  onOpenReportModal={() => setIsReportModalOpen(true)}
-                  onOpenDrillModal={handleTriggerDrill}
-                />
-              </div>
+          {/* 5. /analytics */}
+          <Route path="/analytics" element={
+            <AnalyticsPage
+              incidents={incidents}
+            />
+          } />
 
-              {/* Supporting Panels: Resource Overview & Audit Timeline */}
-              <ResourcePanel incidents={incidents} />
-              <ActivityTimeline incidents={incidents} />
-            </>
-          )}
+          {/* 6. /event-stream */}
+          <Route path="/event-stream" element={
+            <EventStreamPage
+              incidents={incidents}
+            />
+          } />
 
-          {activeWorkspaceTab === 'fleet' && (
-            <ResourcePanel incidents={incidents} />
-          )}
+          {/* 7. /workflows */}
+          <Route path="/workflows" element={
+            <WorkflowsPage
+              incidents={incidents}
+            />
+          } />
 
-          {activeWorkspaceTab === 'telemetry' && (
-            <ActivityTimeline incidents={incidents} />
-          )}
-        </main>
-      </div>
+          {/* 8. /notifications */}
+          <Route path="/notifications" element={
+            <NotificationsPage
+              incidents={incidents}
+            />
+          } />
 
-      {/* 3. Floating Modals, Drawers & Portals */}
-      {/* Incident Intake Portal Modal */}
+          {/* 9. /ai-assistant */}
+          <Route path="/ai-assistant" element={
+            <AIAssistantPage
+              incidents={incidents}
+            />
+          } />
+
+          {/* 10. /iot-mesh (AWS IoT Core) */}
+          <Route path="/iot-mesh" element={
+            <IoTMeshPage
+              onOpenReportModal={handleOpenReportModal}
+            />
+          } />
+
+          {/* 11. /xray-tracing (AWS X-Ray) */}
+          <Route path="/xray-tracing" element={
+            <XRayTracingPage />
+          } />
+
+          {/* 12. /vision-ai (Amazon Rekognition) */}
+          <Route path="/vision-ai" element={
+            <RekognitionPage />
+          } />
+
+          {/* 13. /location-routing (Amazon Location Service) */}
+          <Route path="/location-routing" element={
+            <LocationRoutingPage />
+          } />
+
+          {/* 14. /documentation */}
+          <Route path="/documentation" element={
+            <DocumentationPage />
+          } />
+
+          {/* 11. /settings */}
+          <Route path="/settings" element={
+            <SettingsPage
+              apiEndpoint={apiEndpoint}
+              onApiEndpointChange={setApiEndpoint}
+              isSoundMuted={isSoundMutedState}
+              onToggleSound={handleToggleSound}
+              onResetDemoData={fetchIncidents}
+              connectionStatus={connectionStatus}
+            />
+          } />
+
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+
+      {/* Floating Incident Intake Modal */}
       <IncidentFormModal
         isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
+        onClose={handleCloseReportModal}
         onSubmit={handleReportIncident}
         isSubmitting={isSubmitting}
+        initialLocation={reportModalLocation}
       />
-
-      {/* Incident Detail & Command Dossier Modal */}
-      {isDetailModalOpen && (
-        <IncidentDetailModal
-          incident={selectedIncident}
-          onClose={() => setIsDetailModalOpen(false)}
-          onResolve={handleResolveIncident}
-        />
-      )}
 
       {/* Global Command Palette (Ctrl+K) */}
       <CommandPalette
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
         incidents={incidents}
-        onSelectIncident={handleSelectIncident}
-        onOpenReportModal={() => setIsReportModalOpen(true)}
-        onTriggerDrill={handleTriggerDrill}
+        onSelectIncident={(inc) => {
+          setIsCommandPaletteOpen(false);
+          window.location.href = `/incidents/${inc.incidentId}`;
+        }}
+        onOpenReportModal={() => {
+          setIsCommandPaletteOpen(false);
+          setIsReportModalOpen(true);
+        }}
+        onTriggerDrill={() => {
+          setIsCommandPaletteOpen(false);
+          handleTriggerDrill();
+        }}
         onRecenterMap={() => {
-          // Handled via map instance recenter
-          addToast({ type: 'info', title: 'Map Recenter', message: 'Map view centered to Hyderabad Core Sector.' });
+          addToast({ type: 'info', title: 'Map Centered', message: 'Hyderabad Command Grid centered.' });
         }}
         onToggleSound={handleToggleSound}
         isSoundMuted={isSoundMutedState}
-        onToggleTheme={handleToggleTheme}
-        onToggleCinematicBg={handleToggleCinematicBg}
-      />
-
-      {/* Notification Center Slide-Out Drawer */}
-      <NotificationDrawer
-        isOpen={isNotificationDrawerOpen}
-        onClose={() => setIsNotificationDrawerOpen(false)}
-        notifications={notifications}
-        onClearNotifications={() => setNotifications([])}
-        onSelectIncident={handleSelectIncident}
       />
 
       {/* Floating Action Feedback Toasts */}
@@ -472,6 +496,6 @@ export default function App() {
         toasts={toasts} 
         onDismiss={handleDismissToast} 
       />
-    </>
+    </BrowserRouter>
   );
 }

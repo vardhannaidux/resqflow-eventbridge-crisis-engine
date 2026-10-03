@@ -1,0 +1,139 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ResQFlow — Production Frontend Hosting on Amazon S3 + Amazon CloudFront
+  Secure Origin Access Control (OAC), HTTPS Redirection, and SPA Client-Side Routing
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, stage, prod]
+    Description: Deployment target environment
+
+Resources:
+  # ==========================================================
+  # 1. S3 STATIC ASSET STORAGE (Private with Block Public Access)
+  # ==========================================================
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'resqflow-frontend-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Project
+          Value: ResQFlow
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ==========================================================
+  # 2. CLOUDFRONT ORIGIN ACCESS CONTROL (OAC - Modern Best Practice)
+  # ==========================================================
+  CloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub 'ResQFlow-OAC-${AWS::Region}'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+        Description: Secure Origin Access Control for ResQFlow Frontend S3 Bucket
+
+  # ==========================================================
+  # 3. CLOUDFRONT GLOBAL CDN DISTRIBUTION
+  # ==========================================================
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: 'ResQFlow — Autonomous Incident Intelligence & Orchestration Platform'
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_All
+        HttpVersion: http2and3
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt CloudFrontOAC.Id
+            S3OriginConfig: {}
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          MinTTL: 0
+          DefaultTTL: 86400
+          MaxTTL: 31536000
+        # SPA Client-Side Routing Fallbacks for React Router (/, /login, /dashboard, etc.)
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+      Tags:
+        - Key: Project
+          Value: ResQFlow
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ==========================================================
+  # 4. S3 BUCKET POLICY (Grants GetObject only to CloudFront via OAC)
+  # ==========================================================
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipalReadOnly
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution.Id}'
+
+Outputs:
+  FrontendBucketName:
+    Description: S3 Bucket hosting compiled frontend assets
+    Value: !Ref FrontendBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-FrontendBucket'
+
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution Identifier for cache invalidations
+    Value: !Ref CloudFrontDistribution
+    Export:
+      Name: !Sub '${AWS::StackName}-DistributionId'
+
+  CloudFrontDomainName:
+    Description: CloudFront Distribution Domain Name (Edge CDN URL)
+    Value: !GetAtt CloudFrontDistribution.DomainName
+
+  LiveAppUrl:
+    Description: Live Public HTTPS URL for ResQFlow Web Application
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'

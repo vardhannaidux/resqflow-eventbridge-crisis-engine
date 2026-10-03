@@ -55,3 +55,61 @@ def validate_incident_payload(payload: Optional[Dict[str, Any]]) -> Tuple[bool, 
     }
 
     return True, None, cleaned
+
+def validate_incident_patch(payload: Optional[Dict[str, Any]], current_status: str = "REPORTED") -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
+    """
+    Validates PATCH /incidents/{incidentId} request payload.
+    Permits updating description, peopleAffected, assignedTeam, hospital, notes, and status.
+    Enforces status transition rules and prevents editing a RESOLVED incident.
+    """
+    if not payload or not isinstance(payload, dict):
+        return False, "Patch body must be a non-empty JSON object", None
+
+    if current_status == "RESOLVED":
+        return False, "Cannot modify an incident that has already been RESOLVED", None
+
+    ALLOWED_PATCH_FIELDS = {"description", "peopleAffected", "assignedTeam", "hospital", "status", "notes", "resolutionNotes"}
+    
+    cleaned: Dict[str, Any] = {}
+    
+    for key, val in payload.items():
+        if key not in ALLOWED_PATCH_FIELDS:
+            return False, f"Field '{key}' cannot be updated via PATCH. Allowed fields: {', '.join(sorted(ALLOWED_PATCH_FIELDS))}", None
+
+        if key == "description":
+            if not isinstance(val, str) or len(val.strip()) == 0:
+                return False, "Field 'description' must be a non-empty string", None
+            cleaned["description"] = val.strip()
+
+        elif key == "peopleAffected":
+            if not isinstance(val, int) or val < 0:
+                return False, "Field 'peopleAffected' must be a non-negative integer", None
+            cleaned["peopleAffected"] = val
+
+        elif key == "assignedTeam":
+            if not isinstance(val, str):
+                return False, "Field 'assignedTeam' must be a string", None
+            cleaned["assignedTeam"] = val.strip()
+
+        elif key == "hospital":
+            if not isinstance(val, str):
+                return False, "Field 'hospital' must be a string", None
+            cleaned["hospital"] = val.strip()
+
+        elif key == "status":
+            from common.models import validate_status_transition
+            is_valid_transition, err = validate_status_transition(current_status, str(val))
+            if not is_valid_transition:
+                return False, err, None
+            cleaned["status"] = str(val).strip().upper()
+
+        elif key in ("notes", "resolutionNotes"):
+            if not isinstance(val, str):
+                return False, f"Field '{key}' must be a string", None
+            cleaned[key] = val.strip()
+
+    if not cleaned:
+        return False, "Patch body must contain at least one valid field to update", None
+
+    return True, None, cleaned
+

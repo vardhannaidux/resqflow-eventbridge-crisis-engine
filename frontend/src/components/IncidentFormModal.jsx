@@ -16,7 +16,8 @@ export default function IncidentFormModal({
   isOpen,
   onClose,
   onSubmit,
-  isSubmitting
+  isSubmitting,
+  initialLocation = null
 }) {
   const [formData, setFormData] = useState({
     type: 'FIRE',
@@ -29,6 +30,16 @@ export default function IncidentFormModal({
 
   const [validationError, setValidationError] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
+
+  React.useEffect(() => {
+    if (initialLocation && initialLocation.latitude && initialLocation.longitude) {
+      setFormData(prev => ({
+        ...prev,
+        latitude: initialLocation.latitude,
+        longitude: initialLocation.longitude
+      }));
+    }
+  }, [initialLocation, isOpen]);
 
   if (!isOpen) return null;
 
